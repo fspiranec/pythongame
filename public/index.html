@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dot Maze (Python API + Vercel)</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #111; color: #eee; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+    canvas { background: #000; border-radius: 12px; display: block; width: 100%; height: auto; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+    button { padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer; }
+    .pill { padding: 6px 10px; border: 1px solid #333; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Dot Maze</h1>
+    <div class="row">
+      <button id="newBtn">New Maze</button>
+      <div class="pill">Move: Arrow Keys / WASD</div>
+      <div class="pill" id="status">Loading…</div>
+    </div>
+    <canvas id="c" width="900" height="600"></canvas>
+  </div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const newBtn = document.getElementById("newBtn");
+
+let grid = null, W = 0, H = 0;
+let start = [1,1], goal = [1,1];
+let player = { x: 1, y: 1, r: 0.35 }; // dot radius in cell units
+let cell = 20; // pixels per cell
+let won = false;
+
+function resizeCanvasToGrid() {
+  // Fit canvas width to container while keeping crisp drawing
+  const wrapWidth = canvas.clientWidth || 900;
+  cell = Math.floor(Math.min(28, Math.max(12, wrapWidth / W)));
+  canvas.width = W * cell;
+  canvas.height = H * cell;
+}
+
+async function fetchMaze() {
+  won = false;
+  statusEl.textContent = "Loading…";
+  const seed = Math.random().toString(16).slice(2);
+  const res = await fetch(`/api/maze?w=31&h=21&seed=${seed}`);
+  const data = await res.json();
+  grid = data.grid;
+  W = data.w;
+  H = data.h;
+  start = data.start;
+  goal = data.goal;
+  player.x = start[0];
+  player.y = start[1];
+  resizeCanvasToGrid();
+  statusEl.textContent = "Reach the green square!";
+  draw();
+}
+
+function isWall(x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return true;
+  return grid[y][x] === 1;
+}
+
+function tryMove(dx, dy) {
+  if (!grid || won) return;
+  const nx = player.x + dx;
+  const ny = player.y + dy;
+  if (isWall(nx, ny)) return;
+
+  player.x = nx;
+  player.y = ny;
+
+  if (player.x === goal[0] && player.y === goal[1]) {
+    won = true;
+    statusEl.textContent = "You won! 🎉 (press New Maze)";
+  }
+  draw();
+}
+
+function draw() {
+  if (!grid) return;
+
+  // Background
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Walls
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (grid[y][x] === 1) {
+        ctx.fillStyle = "#222";
+        ctx.fillRect(x * cell, y * cell, cell, cell);
+      }
+    }
+  }
+
+  // Goal
+  ctx.fillStyle = "#1f8f3a";
+  ctx.fillRect(goal[0] * cell, goal[1] * cell, cell, cell);
+
+  // Player dot
+  const cx = (player.x + 0.5) * cell;
+  const cy = (player.y + 0.5) * cell;
+  ctx.fillStyle = won ? "#ffd166" : "#4cc9f0";
+  ctx.beginPath();
+  ctx.arc(cx, cy, player.r * cell, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Light outline
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+window.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"].includes(k)) {
+    e.preventDefault();
+  }
+  if (k === "arrowup" || k === "w") tryMove(0, -1);
+  if (k === "arrowdown" || k === "s") tryMove(0, 1);
+  if (k === "arrowleft" || k === "a") tryMove(-1, 0);
+  if (k === "arrowright" || k === "d") tryMove(1, 0);
+});
+
+window.addEventListener("resize", () => {
+  if (!grid) return;
+  resizeCanvasToGrid();
+  draw();
+});
+
+newBtn.addEventListener("click", fetchMaze);
+
+fetchMaze();
+</script>
+</body>
+</html>
